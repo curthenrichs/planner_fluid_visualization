@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Path Player (prototype)</title>
+
+    <style>
+        /* PROTOTYPE. Sketch of the blog's "path player" lightbox variant.
+           Colors approximate half-built-robots tokens; the real build
+           uses the blog's custom properties and cascade layers. */
+        :root {
+            --ink: #111111;
+            --paper: #ffffff;
+            --amber: #ffaa3c;
+            --veil: rgba(12, 9, 4, 0.82);
+            --grid-line: rgba(17, 17, 17, 0.08);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: #ddd;
+        }
+        /* ---- fake post column, just to demo the poster flow ---- */
+        .fake-post {
+            width: min(90vw, 990px);
+            margin: 60px auto;
+        }
+        .fake-post p { line-height: 1.7; color: #bbb; }
+        .poster {
+            position: relative;
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: 2px solid var(--amber);
+            cursor: pointer;
+            background: #000;
+            line-height: 0;
+        }
+        /* placeholder ground standing in for a poster still, so the
+           prototype carries no binary asset */
+        .poster-frame {
+            display: block;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: radial-gradient(ellipse at 35% 55%, #12454f 0%, #0a2228 55%, #05161b 100%);
+        }
+        .poster .badge {
+            position: absolute;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            line-height: 1.4;
+            background: var(--paper);
+            color: var(--ink);
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: 0.12em;
+            padding: 8px 16px;
+            border: 2px solid var(--ink);
+        }
+        .poster:hover .badge { background: var(--amber); }
+
+        /* ---- overlay (kept in layout when hidden so the WebGL canvas
+                never collapses to 0x0; visibility, not display) ---- */
+        .pp-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--veil);
+            backdrop-filter: blur(7px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .pp-overlay[data-hidden] {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* amber corner strokes bounding the click-safe zone */
+        .pp-zone { position: relative; padding: 26px 30px; }
+        .pp-corner { position: absolute; width: 22px; height: 22px; border: 0 solid var(--amber); }
+        .pp-c-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+        .pp-c-tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+        .pp-c-bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+        .pp-c-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+
+        /* the ink plate */
+        .pp-plate {
+            position: relative;
+            background: var(--paper);
+            color: var(--ink);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            padding: 25px;
+        }
+
+        /* boxed labels straddling the plate edge */
+        .pp-label {
+            position: absolute;
+            background: var(--paper);
+            color: var(--ink);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            padding: 2px 8px;
+            z-index: 1;
+        }
+        .pp-title { top: -12px; left: 25px; }
+        .pp-source { bottom: -12px; left: 25px; }
+        .pp-readout { bottom: -12px; right: 25px; font-variant-numeric: tabular-nums; }
+        .pp-close {
+            position: absolute;
+            top: -17px; right: -17px;
+            width: 34px; height: 34px;
+            background: var(--paper);
+            color: var(--ink);
+            border: 2px solid var(--ink);
+            font: inherit; font-size: 16px; font-weight: 700;
+            cursor: pointer;
+            z-index: 1;
+        }
+        .pp-close:hover { background: var(--amber); }
+
+        /* sim viewbox: grid mat behind the canvas, like the lightbox */
+        .pp-viewbox {
+            position: relative;
+            width: min(72vw, 960px);
+            height: min(48vh, 540px);
+            border: 2px solid var(--ink);
+            background-image:
+                linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+            background-size: 12px 12px;
+            background-position: center center;
+        }
+        .pp-viewbox canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* transport + timeline */
+        .pp-controls {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .pp-btn {
+            width: 34px; height: 34px;
+            flex: 0 0 auto;
+            background: var(--paper);
+            color: var(--ink);
+            border: 2px solid var(--ink);
+            font-size: 14px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .pp-btn:hover { background: var(--amber); }
+        .pp-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+        .pp-timeline {
+            flex: 1 1 auto;
+            position: relative;
+            cursor: ew-resize;
+        }
+        .pp-timeline canvas { width: 100%; display: block; }
+        .pp-track-label {
+            position: absolute;
+            left: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: rgba(17,17,17,0.55);
+            pointer-events: none;
+        }
+
+        /* caption: same zero-intrinsic-width trick as the lightbox so a
+           long line wraps at the viewbox width instead of sizing the plate */
+        .pp-caption {
+            font-size: 12px;
+            line-height: 1.6;
+            text-align: center;
+            color: var(--ink);
+            margin: 14px 0 0;
+            width: 0;
+            min-width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="fake-post">
+        <p>…I built the whole thing over a weekend.</p>
+        <button class="poster" id="pp-open" aria-label="Open the fluid path player">
+            <span class="poster-frame"></span>
+            <span class="badge">&#9654;&#xFE0E; RUN THE PATH</span>
+        </button>
+        <p>The answer, it turns out, is that you map a robot arm&rsquo;s
+        end-effector motion to perturbations in the fluid field&hellip;</p>
+    </div>
+
+    <div class="pp-overlay" id="pp-overlay" data-hidden>
+        <div class="pp-zone">
+            <span class="pp-corner pp-c-tl"></span>
+            <span class="pp-corner pp-c-tr"></span>
+            <span class="pp-corner pp-c-bl"></span>
+            <span class="pp-corner pp-c-br"></span>
+            <div class="pp-plate">
+                <span class="pp-label pp-title">PATH PLAYER</span>
+                <span class="pp-label pp-source">DEMO.JSON &middot; UR3E &middot; RELAXED-IK</span>
+                <span class="pp-label pp-readout" id="pp-readout">T+00.0 / 00.0s</span>
+                <button class="pp-close" id="pp-close" aria-label="Close">&#10005;</button>
+
+                <div class="pp-viewbox">
+                    <canvas></canvas>
+                </div>
+
+                <div class="pp-controls">
+                    <button class="pp-btn" id="pp-play" aria-label="Play or pause">&#9654;&#xFE0E;</button>
+                    <button class="pp-btn" id="pp-restart" aria-label="Restart">&#8634;</button>
+                    <div class="pp-timeline" id="pp-timeline">
+                        <canvas id="pp-tracks"></canvas>
+                        <span class="pp-track-label" id="pp-feed-label">FEED</span>
+                        <span class="pp-track-label" id="pp-path-label">PATH</span>
+                    </div>
+                </div>
+
+                <p class="pp-caption">The arm&rsquo;s end-effector drives the
+                fluid: x and y set where the perturbation lands, z sets its
+                radius, and orientation maps to color (roll, pitch, yaw to
+                red, green, blue). FEED is the color and radius being fed to
+                the sim; PATH is the end-effector position over time, with
+                the pause at each waypoint shaded.</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./player.js"></script>
+</body>
+</html>
