@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Cache-Control" content="no-cache">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+        <title>Planner Fluid Visualization (spoof)</title>
+        <meta name="description" content="Motion Visualizer based on a WebGL fluid simulation, driven by a canned path instead of ROS.">
+
+        <link rel="stylesheet" href="./styles.css">
+
+        <style>
+            /* hide the dat.gui panel for clean capture */
+            .dg.ac { display: none; }
+        </style>
+
+    </head>
+    <body>
+        <canvas></canvas>
+        <script type="module" src="./visual-script.js"></script>
+        <script src="./spoof.js"></script>
+    </body>
+</html>

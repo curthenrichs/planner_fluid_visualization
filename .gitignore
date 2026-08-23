@@ -219,3 +219,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# capture tooling outputs stay local (GIFs and stills are regenerable)
+capture/*.gif
+capture/*.png
+capture/hero-candidates/
